@@ -321,7 +321,7 @@ async function build() {
   
   // 1. Fetch the High-Density TIF Data
   // We use the "pool: null" fix to avoid browser security checks for workers.
-  const tResponse = await fetch('src/data/gebco_2025_n50.0_s31.5_w-126.5_e-116.0.tif');
+  const tResponse = await fetch('/data/gebco_2025_n50.0_s31.5_w-126.5_e-116.0.tif');
   const tBlob = await tResponse.blob();
   const tiff = await fromBlob(tBlob);
   const image = await tiff.getImage();
