@@ -1,11 +1,717 @@
----
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ridgelines — A Field Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@300;400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--paper:#e9e9e9;--paper-dark:#dcdcdc;--ink:#1a1814;--ink-light:#3d3a34;--ink-faint:#8a8680;--accent:#c4502a;--ocean:#bfcdd6;--panel-w:380px}
+html,body{width:100%;height:100%;background:var(--ocean);color:var(--ink);font-family:'EB Garamond',Georgia,serif;overflow:hidden}
+#header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:baseline;justify-content:space-between;padding:18px 32px 14px;border-bottom:1px solid var(--ink);background:var(--paper)}
+#header h1{font-family:'IBM Plex Mono',serif;font-size:1.45rem;font-weight:400;letter-spacing:.04em}
+.sub{font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:var(--ink-faint);letter-spacing:.12em;text-transform:uppercase}
+#map-container{position:fixed;inset:0}
+#map-canvas{display:block;cursor:grab}
+#map-canvas:active{cursor:grabbing}
+#loading{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-faint);transition:opacity .6s}
+#loading.hidden{opacity:0;pointer-events:none}
+#lbar-wrap{width:180px;height:1px;background:var(--paper-dark);margin-top:16px}
+#lbar{height:1px;background:var(--ink);width:0%;transition:width .3s}
+#legend{position:fixed;bottom:28px;left:32px;z-index:50;font-family:'IBM Plex Mono',monospace;font-size:.58rem;color:var(--ink-faint);letter-spacing:.1em;text-transform:uppercase;line-height:1.9;border-left:1px solid var(--ink-faint);padding-left:10px}
+#hint {
+  position: fixed;
+  top: 95px;
+  right: 32px;
+  z-index: 50;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .58rem;
+  color: var(--ink-faint);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  text-align: right;
+  transition: opacity .6s;
+  
+  /* Vertical Stacking Logic */
+  display: flex;
+  flex-direction: column;
+  gap: 8px; /* Space between each instruction line */
+}
+#blog-panel {
+  position: fixed;
+  top: 95px; /* Offset from header */
+  left: 32px;
+  bottom: 32px;
+  width: var(--panel-w);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 8px; /* Floating card look */
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  transform: translateX(calc(-100% - 40px)); /* Hidden off-screen */
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
----
+#blog-panel.open {
+  transform: translateX(0);
+}
 
-<Layout>
-	<Welcome />
-</Layout>
+/* The Expansion State */
+#blog-panel.expanded {
+  width: calc(100% - 64px);
+  max-width: 1200px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#panel-header {
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid var(--paper-dark);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+/* New Controls Container */
+#panel-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px; /* Space between Expand and Close */
+  margin-top: -4px; /* Alignment tweak */
+}
+
+.panel-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .65rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  transition: color 0.2s;
+  padding: 5px; /* Bigger hit area */
+}
+
+.panel-btn:hover { 
+  color: var(--ink); 
+}
+
+/* Remove the absolute positioning that was causing the overlap */
+#panel-close {
+  position: static; 
+}
+#panel-close:hover{color:var(--ink)}
+#panel-tag{font-family:'IBM Plex Mono',monospace;font-size:.58rem;color:var(--accent);letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
+#panel-title{font-family:'Playfair Display',serif;font-size:1.55rem;line-height:1.25;font-weight:400;margin-bottom:6px}
+#panel-meta{font-family:'IBM Plex Mono',monospace;font-size:.6rem;color:var(--ink-faint);letter-spacing:.08em}
+#panel-body{flex:1;overflow-y:auto;padding:28px 28px 48px;scrollbar-width:thin;scrollbar-color:var(--paper-dark) transparent}
+#panel-body p{font-size:1rem;line-height:1.75;color:var(--ink-light);margin-bottom:1.2em}
+#panel-body p:first-child::first-letter{font-family:'Playfair Display',serif;font-size:3.2rem;line-height:.85;float:left;margin-right:6px;margin-top:6px;color:var(--ink)}
+.enote{font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:var(--ink-faint);letter-spacing:.1em;text-transform:uppercase;border-top:1px solid var(--paper-dark);padding-top:16px;margin-top:24px;line-height:2}
+.enote span{color:var(--ink)}
+#tooltip{position:fixed;z-index:150;pointer-events:none;opacity:0;transition:opacity .15s}
+#tooltip.visible{opacity:1}
+#tti{position:relative;background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:5px 10px;white-space:nowrap}
+#tti::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--ink)}
+body::after{content:'';position:fixed;inset:0;z-index:999;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");opacity:.55}
+</style>
+</head>
+<body>
+<div id="loading"><div>Building terrain</div><div id="lbar-wrap"><div id="lbar"></div></div></div>
+<div id="header">
+  <div><h1>Losers Go Camping</h1><div class="sub">(Megan came up with that name)</div></div>
+  <div class="sub" style="letter-spacing:.06em;font-size:.6rem">And also climbing, this is mainly climbing</div>
+</div>
+<div id="map-container"><canvas id="map-canvas"></canvas></div>
+<div id="legend"><div>▲ Summit</div><div>— Contour (250m interval)</div><div>· Click a peak to read</div></div>
+<div id="hint">
+  <div>Left Click · Pan</div>
+  <div>Right Click · Rotate</div>
+  <div>Scroll · Zoom</div>
+</div>
+<div id="tooltip"><div id="tti"></div></div>
+<div id="blog-panel">
+  <div id="panel-header">
+    <div id="header-text-group">
+      <div id="panel-tag"></div>
+      <div id="panel-title"></div>
+      <div id="panel-meta"></div>
+    </div>
+    <div id="panel-controls">
+      <button id="panel-expand" class="panel-btn">Expand ⤢</button>
+      <button id="panel-close" class="panel-btn">Close ✕</button>
+    </div>
+  </div>
+  <div id="panel-body"></div>
+</div>
+
+<!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> -->
+
+
+<script>
+import * as THREE from 'three';
+import { fromBlob } from 'geotiff';
+
+// ── GLOBAL CONFIGURATION (Properly Scoped for Module) ──
+let HM_RASTER = null;
+let HM_W = 160; 
+let HM_H = 130;
+const HM_MINLAT=31.5, HM_MAXLAT=50.0, HM_MINLNG=-126.5, HM_MAXLNG=-116.0;
+const HM_MINE=-300, HM_MAXE=4500;
+
+// Aesthetic Scale (TIF literal meters -> Three.js Units)
+const MAP_SCALE=9.0;
+const ELEV_SCALE = 0.00003;
+const LAND_BASE_Y = 0.02; // tiny gap above flat land base to prevent Z-fighting
+
+// ── REFINED ELEVATION LOGIC using TIF Data ──
+function hmElev(nx, ny) {
+  if (!HM_RASTER) return 0;
+  const ix = Math.min(HM_W-1, Math.round(nx*(HM_W-1)));
+  const iy = Math.min(HM_H-1, Math.round(ny*(HM_H-1)));
+  return HM_RASTER[iy*HM_W+ix];
+}
+
+function hmElevBilinear(nx, ny) {
+  if (!HM_RASTER) return 0;
+  const fx=nx*(HM_W-1), fy=ny*(HM_H-1);
+  const ix=Math.floor(fx), iy=Math.floor(fy);
+  const tx=fx-ix, ty=fy-iy;
+  const ix1=Math.min(ix+1,HM_W-1), iy1=Math.min(iy+1,HM_H-1);
+  
+  const b00 = HM_RASTER[iy*HM_W+ix];
+  const b10 = HM_RASTER[iy*HM_W+ix1];
+  const b01 = HM_RASTER[iy1*HM_W+ix];
+  const b11 = HM_RASTER[iy1*HM_W+ix1];
+  
+  return b00*(1-tx)*(1-ty)+b10*(tx)*(1-ty)+b01*(1-tx)*(ty)+b11*tx*ty;
+}
+
+// ── GEO→SCENE ──
+const MAP_ASPECT=(HM_MAXLNG-HM_MINLNG)/(HM_MAXLAT-HM_MINLAT);
+function geo2xz(lat,lng){
+  const nx=(lng-HM_MINLNG)/(HM_MAXLNG-HM_MINLNG);
+  const ny=1-(lat-HM_MINLAT)/(HM_MAXLAT-HM_MINLAT);
+  return [(nx-0.5)*MAP_SCALE*MAP_ASPECT,(ny-0.5)*MAP_SCALE];
+}
+
+// ── TRIPS (Data unchanged) ──
+const TRIPS=[
+  {name:'Tahquitz Peak',tag:'San Jacinto Mountains · So-Cal',date:'October 2023',elevation:'8,846 ft / 2,696 m',lat:33.745,lng:-116.678,
+   body:['The tram ride up to Mountain Station was almost theatrical — desert floor one moment, subalpine forest the next, the San Jacinto wilderness unfurling below like a crumpled brown cloth. By the time I laced up at the trailhead it was already past ten, and the October light had that low, amber quality that turns granite into gold.',
+         'The south face of Tahquitz is famous among climbers, and you feel why the moment you round the boulder field and see the great slab rising. That afternoon I was just hiking — the Devil\'s Slide trail up through yellow pine — but the rock kept demanding attention, enormous and architectural, like something placed deliberately.',
+         'At the summit the desert opened south toward the Salton Sea, a silver smear sixty miles off. Wind came off the ridge in long, cold pulses. I sat with thermos coffee and watched a pair of ravens work the updraft until my fingers were too cold to write.'],
+   stats:{distance:'11.2 mi',gain:'3,400 ft',season:'Oct–May'}},
+  {name:'Mount Whitney',tag:'Sierra Nevada · California',date:'August 2022',elevation:'14,505 ft / 4,421 m',lat:36.578,lng:-118.292,
+   body:['The permit lottery had taken two years of trying. When the email finally came in February I read it three times before I believed it — a single-day permit for late August, the window when the afternoon thunderstorms are most predictable and the summit snowfields are long melted.',
+         'I started at 3:30am, headlamp on the granite dust. The Main Trail is everything you\'ve heard: 22 switchbacks up the face, a lunar plateau, then the final ridge walk on broken rock that seems to go on forever above 14,000 feet where the air starts feeling borrowed.',
+         'The summit register. The little stone hut. The view east into Nevada, that vast tilted plain fading into nothing. Standing on the highest point in the lower 48 it felt quiet, almost private, like being let in on something.'],
+   stats:{distance:'22 mi',gain:'6,100 ft',season:'Jul–Oct'}},
+  {name:'Mount Baker',tag:'North Cascades · Washington',date:'July 2024',elevation:'10,781 ft / 3,286 m',lat:48.777,lng:-121.814,
+   body:['Will the petrodollar ever recover??',
+         'The Coleman-Deming route is considered the standard, but standard on Baker means crevasse navigation, rope teams, crampons from the first hour. We roped up at the edge of the Coleman Glacier at 6am, the sky just turning from black to deep purple.',
+         'We reached the crater rim in six hours. The fumaroles were going — sulphurous steam venting from the ice. The summit pyramid rose another 200 feet of rotten scree beyond. We signed the register and ate lunch in the wind, watching clouds build over the San Juan Islands.'],
+   stats:{distance:'12 mi',gain:'7,000 ft',season:'May–Sep'}}
+];
+
+// ── THREE.JS SETUP ──
+const canvas=document.getElementById('map-canvas');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.outputEncoding = THREE.LinearEncoding;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setClearColor(0xbfcdd6,1);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(36,1,0.1,1000);
+(function onResize(){
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  window.addEventListener('resize',onResize);
+})();
+scene.add(new THREE.AmbientLight(0xf0ece4,3.5));
+const sun=new THREE.DirectionalLight(0xfff8f0,0.75); sun.position.set(-4,8,5); scene.add(sun);
+scene.fog = new THREE.Fog(0xbfcdd6, 8, 20);
+
+// ── PROGRESS ──
+const lbar=document.getElementById('lbar');
+function prog(p){lbar.style.width=(p*100)+'%';}
+
+// ── MARCHING SQUARES ──
+function marchingSquares(grid, W, H, threshold) {
+  const segs=[];
+  function lerp(a,b,va,vb){ return a+(b-a)*(threshold-va)/(vb-va); }
+  for(let iy=0;iy<H-1;iy++){
+    for(let ix=0;ix<W-1;ix++){
+      const v00=grid[iy*W+ix], v10=grid[iy*W+ix+1];
+      const v01=grid[(iy+1)*W+ix], v11=grid[(iy+1)*W+ix+1];
+      const b=(v00>=threshold?8:0)|(v10>=threshold?4:0)|(v11>=threshold?2:0)|(v01>=threshold?1:0);
+      if(b===0||b===15) continue;
+      const x0=ix/(W-1), x1=(ix+1)/(W-1), y0=iy/(H-1), y1=(iy+1)/(H-1);
+      // Edge midpoints
+      const N=[lerp(x0,x1,v00,v10), y0];
+      const E=[x1, lerp(y0,y1,v10,v11)];
+      const S=[lerp(x0,x1,v01,v11), y1];
+      const W2=[x0, lerp(y0,y1,v00,v01)];
+      const cases={1:[W2,S],2:[S,E],3:[W2,E],4:[N,E],6:[N,S],7:[W2,N],
+                   8:[W2,N],9:[N,S],11:[N,E],12:[W2,E],13:[S,E],14:[W2,S],
+                   5:[W2,N,S,E],10:[W2,S,N,E]};
+      const c=cases[b]; if(!c) continue;
+      for(let k=0;k<c.length;k+=2) segs.push([c[k],c[k+1]]);
+    }
+  }
+  return segs;
+}
+
+const RANGE_SPINE = [
+  {lat: 48.8, lng: -121.8}, // Mt Baker
+  {lat: 46.8, lng: -121.7}, // Mt Rainier
+  {lat: 44.1, lng: -121.7}, // Three Sisters
+  {lat: 41.5, lng: -122.2}, // Mt Shasta
+  {lat: 38.8, lng: -120.0}, // Tahoe / Desolation Wilderness
+  {lat: 37.1, lng: -118.7}, // Evolution Basin / High Sierra
+  {lat: 36.1, lng: -118.3}, // Southern Sierra / Whitney
+  {lat: 34.1, lng: -116.9}  // San Bernardino
+];
+function distToSegment(px, pz, x1, z1, x2, z2) {
+  const dx = x2 - x1, dz = z2 - z1;
+  if (dx === 0 && dz === 0) return Math.sqrt((px - x1)**2 + (pz - z1)**2);
+  let t = ((px - x1) * dx + (pz - z1) * dz) / (dx * dx + dz * dz);
+  t = Math.max(0, Math.min(1, t));
+  return Math.sqrt((px - (x1 + t * dx))**2 + (pz - (z1 + t * dz))**2);
+}
+
+// ── BUILD ──
+async function build() {
+  prog(0.05);
+  
+  // 1. Fetch the High-Density TIF Data
+  // We use the "pool: null" fix to avoid browser security checks for workers.
+  const tResponse = await fetch('src/data/gebco_2025_n50.0_s31.5_w-126.5_e-116.0.tif');
+  const tBlob = await tResponse.blob();
+  const tiff = await fromBlob(tBlob);
+  const image = await tiff.getImage();
+  
+  // 2. IMPORTANT: Remove 'let' here. Assign to the module-scoped variables.
+  HM_W = image.getWidth(); 
+  HM_H = image.getHeight();
+  
+  // High-performance raster extraction (single thread)
+  const rasters = await image.readRasters({ interleave: false, pool: null });
+  HM_RASTER = rasters[0]; 
+  prog(0.15);
+
+  // 3. Re-enable World Atlas Fetch for Flat Land Mass
+  let landPolys=[];
+  try {
+    const lr = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(r=>r.json());
+    landPolys=topoPolygons(lr,'countries');
+  } catch(e){ console.warn('Geo CDN unavailable'); }
+  prog(0.3);
+
+  // Land bounding logic
+  function inBounds(lng,lat){ return lng>HM_MINLNG-3&&lng<HM_MAXLNG+3&&lat>HM_MINLAT-3&&lat<HM_MAXLAT+3; }
+  
+  // GeoToScene positioning helpers
+  const W3=MAP_SCALE*MAP_ASPECT, H3=MAP_SCALE;
+  function geo2x01(lng,lat){
+    const nx=(lng-HM_MINLNG)/(HM_MAXLNG-HM_MINLNG);
+    const ny=1-(lat-HM_MINLAT)/(HM_MAXLAT-HM_MINLAT);
+    return [nx,ny];
+  }
+
+  // 4. Create and Position the Flat Land Mass Mesh
+  // Material for the solid base
+  const landMat=new THREE.MeshLambertMaterial({
+      color:0xD9D9D9, // Clean white-tan look
+      side:THREE.DoubleSide,
+      flatShading: false // Disabled for the flat base
+  });
+  
+  const coastPts=[];
+
+  // The cookie-cutter flat land mass logic (ExtrudeGeometry)
+  for(const poly of landPolys.filter(p=>p.outer.some(([g,t])=>inBounds(g,t)))){
+    try{
+      const sh=lngLatToShape(poly.outer); if(!sh) continue;
+      for(const h of poly.holes){const hh=lngLatToShape(h);if(hh)sh.holes.push(hh);}
+      
+      // We give the physical base a thickness, but it remains a "flat mass."
+      const geo=new THREE.ExtrudeGeometry(sh,{depth:0.18,bevelEnabled:false});
+      geo.rotateX(Math.PI/2); // Fixed orientation
+      
+      const m=new THREE.Mesh(geo,landMat); 
+      m.position.y = 0; // Solid base grounded at Y=0
+      m.frustumCulled=false; 
+      scene.add(m);
+    }catch(e){}
+    
+    // Coastline Outline Sync
+    for(const ring of [poly.outer,...poly.holes]){
+      const pts=ring.filter(([g,t])=>inBounds(g,t));
+      for(let i=0;i<pts.length-1;i++){
+        const[x0,z0]=geo2xz(pts[i][1],pts[i][0]);
+        const[x1,z1]=geo2xz(pts[i+1][1],pts[i+1][0]);
+        // Sitting just 0.01 above the flat land base
+        coastPts.push(x0,0.01,z0, x1,0.01,z1);
+      }
+    }
+  }
+
+  // Render the coastline outline
+  function makeMergedLines(flatPts, color, opacity) {
+    if(!flatPts.length) return;
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(flatPts,3));
+    geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,0,0),50);
+    const mat=new THREE.LineBasicMaterial({color,transparent:opacity<1,opacity});
+    const ls=new THREE.LineSegments(geo,mat);
+    ls.frustumCulled=false; scene.add(ls);
+  }
+  // makeMergedLines(coastPts, 0x1a1814, 1.0);
+  prog(0.55);
+
+  // 5. Build Floating 3D Contours via Marching Squares
+  // Prepare Float Grid from TIF Data (Literal Meters)
+  const floatGrid=new Float32Array(HM_W*HM_H);
+  // for(let i = 0; i < HM_RASTER.length; i++) {
+  //     floatGrid[i] = HM_RASTER[i]; 
+  // }
+  // --- SMOOTHING FILTER ---
+  for (let iy = 0; iy < HM_H; iy++) {
+    for (let ix = 0; ix < HM_W; ix++) {
+      let sum = 0;
+      let count = 0;
+      
+      // Look at a 3x3 neighborhood around the pixel
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const ny = iy + ky;
+          const nx = ix + kx;
+          if (ny >= 0 && ny < HM_H && nx >= 0 && nx < HM_W) {
+            sum += HM_RASTER[ny * HM_W + nx];
+            count++;
+          }
+        }
+      }
+      // Store the average in the grid used for contours
+      floatGrid[iy * HM_W + ix] = sum / count;
+    }
+  }
+
+  const thinPts=[], boldPts=[];
+
+  // Contour loop using good TIF data
+  for(let threshold = 600; threshold <= 4400; threshold += 100){
+    const bold = (threshold % 500 === 0);
+    const segs = marchingSquares(floatGrid, HM_W, HM_H, threshold);
+    const Y = LAND_BASE_Y + threshold * ELEV_SCALE; 
+
+    for(const [[nx0, ny0], [nx1, ny1]] of segs){
+      // 1. Setup coordinates
+      const x0 = (nx0 - 0.5) * W3, z0 = (ny0 - 0.5) * H3;
+      const x1 = (nx1 - 0.5) * W3, z1 = (ny1 - 0.5) * H3;
+      const lng = HM_MINLNG + nx0 * (HM_MAXLNG - HM_MINLNG);
+
+      // 2. FIND DISTANCE TO NEAREST SPINE SEGMENT
+      let minSpineDist = 999;
+      for (let i = 0; i < RANGE_SPINE.length - 1; i++) {
+          const [sx1, sz1] = geo2xz(RANGE_SPINE[i].lat, RANGE_SPINE[i].lng);
+          const [sx2, sz2] = geo2xz(RANGE_SPINE[i+1].lat, RANGE_SPINE[i+1].lng);
+          const d = distToSegment(x0, z0, sx1, sz1, sx2, sz2);
+          if (d < minSpineDist) minSpineDist = d;
+      }
+
+      // 3. THE "CORRIDOR" FADE
+      // 0.6 is a tight hug (~50 miles), 1.8 is a soft outer fade
+      const innerRadius = 0.6; 
+      const outerRadius = 1.2; 
+
+      let alpha = 1.0 - (minSpineDist - innerRadius) / (outerRadius - innerRadius);
+      alpha = Math.pow(Math.max(0, Math.min(1, alpha)), 2); // Squared for cleaner edges
+
+      // 4. THE STIPPLE GATE
+      if (alpha < Math.random()) continue;
+
+      // Hard boundary cleanup
+      if (lng < -124.5) continue;
+
+      (bold ? boldPts : thinPts).push(x0, Y, z0, x1, Y, z1);
+        }
+}
+
+  // Render the contours with faded styling for high-density elegance
+  function makeLineSegs(flatPts, color, opacity) {
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(flatPts,3));
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), 50);
+    const mat=new THREE.LineBasicMaterial({color,transparent:true,opacity});
+    const ls=new THREE.LineSegments(geo,mat);
+    ls.frustumCulled=false; scene.add(ls);
+  }
+  
+  // Thin details: Faded gray ink
+  if(thinPts.length) makeLineSegs(thinPts, 0x8a8680, 0.22); 
+  // Bold major lines: Dark gray/black
+  if(boldPts.length) makeLineSegs(boldPts, 0x1e1a16, 0.65); 
+  prog(0.85);
+
+  // ── MARKERS (Now floating aligned with topo rings) ──
+  const markers=[];
+  for(const trip of TRIPS){
+    const[x,z]=geo2xz(trip.lat,trip.lng);
+    const nx=(trip.lng-HM_MINLNG)/(HM_MAXLNG-HM_MINLNG);
+    const ny=1-(trip.lat-HM_MINLAT)/(HM_MAXLAT-HM_MINLAT);
+    
+    // Marker sits at its TRUE bilinear calculated elevation + gap.
+    const baseY = LAND_BASE_Y + Math.max(0,hmElevBilinear(nx,ny)) * ELEV_SCALE;
+
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(.013,.013,.32,6),new THREE.MeshLambertMaterial({color:0x1a1814}));
+    stem.frustumCulled=false; stem.position.set(x,baseY+.16,z); scene.add(stem);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.064,12,12),new THREE.MeshLambertMaterial({color:0xc4502a}));
+    head.frustumCulled=false; head.position.set(x,baseY+.34,z); head.userData={trip}; scene.add(head);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.13,.012,6,28),new THREE.MeshLambertMaterial({color:0xc4502a,transparent:true,opacity:.28}));
+    ring.frustumCulled=false; ring.position.set(x,baseY+.02,z); ring.rotation.x=-Math.PI/2; ring.userData={phase:Math.random()*Math.PI*2};
+    scene.add(ring);
+    markers.push({head,ring});
+  }
+
+  // // --- OPTIMIZED LOW-POLY OCCLUDER ---
+  // const OCCLUDE_RES = 150; // Much lower resolution for performance
+  // const occluderMat = new THREE.MeshBasicMaterial({
+  //   color: 0xEBEBEB, // Matches your land color
+  //   side: THREE.DoubleSide
+  // });
+
+  // const terrainGeo = new THREE.PlaneGeometry(
+  //   MAP_SCALE * MAP_ASPECT, 
+  //   MAP_SCALE, 
+  //   OCCLUDE_RES - 1, 
+  //   OCCLUDE_RES - 1
+  // );
+
+  // const v = terrainGeo.attributes.position.array;
+  // for (let i = 0; i < v.length; i++) {
+  //   const zIdx = i * 3 + 2;
+    
+  //   // Calculate where this low-poly vertex sits in the high-res TIF grid
+  //   const x01 = (i % OCCLUDE_RES) / (OCCLUDE_RES - 1);
+  //   const y01 = Math.floor(i / OCCLUDE_RES) / (OCCLUDE_RES - 1);
+    
+  //   // Sample the elevation using your existing bilinear function
+  //   const rawE = hmElevBilinear(x01, y01);
+    
+  //   // Offset slightly DOWN (-0.002) so lines stay clearly on top
+  //   v[zIdx] = Math.max(0, (rawE - 10) * ELEV_SCALE) - 0.002;
+  // }
+
+  // terrainGeo.rotateX(-Math.PI / 2);
+  // const mountainVolume = new THREE.Mesh(terrainGeo, occluderMat);
+  // mountainVolume.position.y = LAND_BASE_Y; 
+  // scene.add(mountainVolume);
+
+  prog(1.0);
+  scene.traverse(obj => { obj.frustumCulled = false; });
+  run(markers);
+}
+
+// ── UTILITIES (Unchanged) ──
+function lngLatToShape(ring){
+  if(!ring||ring.length<4) return null;
+  const s=new THREE.Shape(); let first=true;
+  for(const[lng,lat] of ring){ const[x,z]=geo2xz(lat,lng); if(first){s.moveTo(x,z);first=false;}else s.lineTo(x,z); }
+  return s;
+}
+
+function topoPolygons(topo,name){
+  const obj=topo.objects[name];
+  const{scale,translate}=topo.transform;
+  const arcs=topo.arcs.map(arc=>{let x=0,y=0;return arc.map(d=>{x+=d[0];y+=d[1];return[x*scale[0]+translate[0],y*scale[1]+translate[1]];});});
+  function ring(ids){const p=[];for(const i of ids){const a=i<0?[...arcs[~i]].reverse():arcs[i];p.push(...a.slice(0,-1));}return p;}
+  const out=[];
+  for(const g of obj.geometries){
+    const parts=g.type==='Polygon'?[g.arcs]:g.arcs;
+    for(const p of parts) out.push({outer:ring(p[0]),holes:p.slice(1).map(ring)});
+  }
+  return out;
+}
+
+// ── RUN (Unchanged except ocean sync) ──
+function run(markers){
+  document.getElementById('loading').classList.add('hidden');
+
+  let az=0.08, pol=0.50, rad=5; 
+  let taz=0.08, tpol=0.50, trad=5;
+  let target=new THREE.Vector3(0, 0.2, 0.5); 
+  let ttarget=target.clone();
+
+  const groundPlane=new THREE.Mesh(
+    new THREE.PlaneGeometry(100,100),
+    new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide})
+  );
+  groundPlane.rotation.x=-Math.PI/2;
+  groundPlane.frustumCulled=false;
+  scene.add(groundPlane);
+
+  const ray=new THREE.Raycaster();
+  const mouse=new THREE.Vector2();
+
+  function getGroundPoint(ex, ey){
+    mouse.x=(ex/innerWidth)*2-1;
+    mouse.y=-(ey/innerHeight)*2+1;
+    ray.setFromCamera(mouse,camera);
+    const hits=ray.intersectObject(groundPlane);
+    return hits.length ? hits[0].point : null;
+  }
+
+    // --- SWAPPED MOUSE LOGIC ---
+  let isPanning = false;
+  let drag = false;
+  let lx = 0, ly = 0;
+
+  // Prevent right-click menu
+  window.addEventListener('contextmenu', e => e.preventDefault());
+
+  canvas.addEventListener('mousedown', e => {
+    lx = e.clientX; ly = e.clientY;
+    
+    // LEFT CLICK (button 0) now PANS
+    // RIGHT CLICK (button 2) or SHIFT now ROTATES
+    if (e.button === 0 && !e.shiftKey) {
+      isPanning = true;
+    } else {
+      drag = true;
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    drag = false;
+    isPanning = false;
+  });
+
+  window.addEventListener('mousemove', e => {
+    const dx = e.clientX - lx;
+    const dy = e.clientY - ly;
+
+    if (isPanning) {
+      // PANNING (Left Click)
+      const panSpeed = rad * 0.0012; 
+      ttarget.x -= (dx * Math.cos(az) + dy * Math.sin(az)) * panSpeed;
+      ttarget.z += (dx * Math.sin(az) - dy * Math.cos(az)) * panSpeed;
+      
+      // Limits to keep you within the CA/WA data range
+      ttarget.x = Math.max(-6, Math.min(6, ttarget.x));
+      ttarget.z = Math.max(-8, Math.min(8, ttarget.z));
+      
+      canvas.style.cursor = 'grabbing';
+    } else if (drag) {
+      // ROTATION (Right Click or Shift+Left)
+      taz -= dx * 0.005;
+      tpol = Math.max(0.12, Math.min(1.55, tpol + dy * 0.004));
+      canvas.style.cursor = 'crosshair'; // Visual cue that you're orbiting
+    } else {
+      canvas.style.cursor = 'grab';
+    }
+
+    lx = e.clientX; ly = e.clientY;
+  });
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const zoomDelta = e.deltaY * 0.012;
+    const newRad = Math.max(2, Math.min(22, trad + zoomDelta));
+    const zoomFactor = 1 - (newRad / trad); 
+    
+    const pt = getGroundPoint(e.clientX, e.clientY);
+    if (pt && Math.abs(zoomFactor) > 0.001) {
+      const shift = new THREE.Vector3().subVectors(pt, ttarget).multiplyScalar(zoomFactor * 0.5);
+      ttarget.x = Math.max(-6, Math.min(6, ttarget.x + shift.x));
+      ttarget.z = Math.max(-8, Math.min(8, ttarget.z + shift.z));
+    }
+    trad = newRad;
+  }, {passive: false});
+
+  const tip=document.getElementById('tooltip'), tti=document.getElementById('tti');
+  const panel=document.getElementById('blog-panel');
+  const heads=markers.map(m=>m.head);
+
+  window.addEventListener('mousemove',e=>{
+    if(drag)return;
+    mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+    ray.setFromCamera(mouse,camera);
+    const h=ray.intersectObjects(heads);
+    if(h.length){
+      tti.textContent=h[0].object.userData.trip.name;
+      tip.style.left=(e.clientX-55)+'px'; tip.style.top=(e.clientY-50)+'px';
+      tip.classList.add('visible'); canvas.style.cursor='pointer';
+    } else {
+      tip.classList.remove('visible');
+      canvas.style.cursor=drag?'grabbing':'grab';
+    }
+  });
+  canvas.addEventListener('click',e=>{
+    mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+    ray.setFromCamera(mouse,camera);
+    const h=ray.intersectObjects(heads);
+    if(h.length) openPanel(h[0].object.userData.trip);
+  });
+  document.getElementById('panel-close').addEventListener('click',()=>panel.classList.remove('open'));
+
+  function openPanel(trip){
+    document.getElementById('panel-tag').textContent=trip.tag;
+    document.getElementById('panel-title').textContent=trip.name;
+    document.getElementById('panel-meta').textContent=trip.date+' · '+trip.elevation;
+    document.getElementById('panel-body').innerHTML=trip.body.map(p=>`<p>${p}</p>`).join('')+
+      `<div class="enote"><div>Summit <span>${trip.elevation}</span></div><div>Distance <span>${trip.stats.distance}</span></div><div>Gain <span>${trip.stats.gain}</span></div><div>Season <span>${trip.stats.season}</span></div></div>`;
+    document.getElementById('panel-body').scrollTop=0;
+    panel.classList.add('open');
+  }
+
+  // 6. Ocean plane sync
+  const oGeo=new THREE.PlaneGeometry(100,100); oGeo.rotateX(-Math.PI/2);
+  const oMesh = new THREE.Mesh(oGeo, new THREE.MeshLambertMaterial({color: 0xbfcdd6}));
+  oMesh.position.y = -0.05; // Slightly below Z=0 (the flat land)
+  scene.add(oMesh);
+
+  const clock=new THREE.Clock();
+  (function animate(){
+    requestAnimationFrame(animate);
+    const t=clock.getElapsedTime();
+    az+=(taz-az)*.08; pol+=(tpol-pol)*.08; rad+=(trad-rad)*.08;
+    target.lerp(ttarget,.08);
+    camera.position.set(target.x + rad*Math.sin(pol)*Math.sin(az),target.y + rad*Math.cos(pol),target.z + rad*Math.sin(pol)*Math.cos(az));
+    camera.lookAt(target);
+    for(const{ring}of markers){
+      const s=1+.28*Math.sin(t*1.8+ring.userData.phase);
+      ring.scale.set(s,s,s); ring.material.opacity=.08+.22*(1-(s-1)/.28);
+    }
+    renderer.render(scene,camera);
+  })();
+
+  const expandBtn = document.getElementById('panel-expand');
+  const blogPanel = document.getElementById('blog-panel');
+
+  expandBtn.addEventListener('click', () => {
+    blogPanel.classList.toggle('expanded');
+    // Update button text based on state
+    expandBtn.textContent = blogPanel.classList.contains('expanded') ? 'Shrink ⤡' : 'Expand ⤢';
+  });
+
+  // Also ensure clicking close removes the expanded state
+  document.getElementById('panel-close').addEventListener('click', () => {
+    blogPanel.classList.remove('open');
+    blogPanel.classList.remove('expanded');
+    expandBtn.textContent = 'Expand ⤢';
+  });
+}
+
+build();
+</script>
+</body>
+</html>
