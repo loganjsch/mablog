@@ -114,8 +114,40 @@ html,body{width:100%;height:100%;background:var(--ocean);color:var(--ink);font-f
 #panel-body{flex:1;overflow-y:auto;padding:28px 28px 48px;scrollbar-width:thin;scrollbar-color:var(--paper-dark) transparent}
 #panel-body p{font-size:1rem;line-height:1.75;color:var(--ink-light);margin-bottom:1.2em}
 #panel-body p:first-child::first-letter{font-family:'Playfair Display',serif;font-size:3.2rem;line-height:.85;float:left;margin-right:6px;margin-top:6px;color:var(--ink)}
-.enote{font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:var(--ink-faint);letter-spacing:.1em;text-transform:uppercase;border-top:1px solid var(--paper-dark);padding-top:16px;margin-top:24px;line-height:2}
-.enote span{color:var(--ink)}
+/* Stats Section - Forced Grid Layout */
+.enote {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important; /* Forces two columns */
+  gap: 20px 30px !important;
+  border-top: 1px solid var(--paper-dark);
+  margin-top: 40px;
+  padding: 24px 0 40px;
+  clear: both !important; /* Critical: stops the drop-cap from breaking the grid */
+  width: 100%;
+  position: relative;
+}
+
+.enote-item {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.enote-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.58rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+}
+
+.enote-value {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-style: italic;
+  color: var(--ink);
+  line-height: 1.2;
+}
 #tooltip{position:fixed;z-index:150;pointer-events:none;opacity:0;transition:opacity .15s}
 #tooltip.visible{opacity:1}
 #tti{position:relative;background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;padding:5px 10px;white-space:nowrap}
@@ -126,8 +158,8 @@ body::after{content:'';position:fixed;inset:0;z-index:999;pointer-events:none;ba
 <body>
 <div id="loading"><div>Building terrain</div><div id="lbar-wrap"><div id="lbar"></div></div></div>
 <div id="header">
-  <div><h1>Losers Go Camping</h1><div class="sub">(Megan came up with that name)</div></div>
-  <div class="sub" style="letter-spacing:.06em;font-size:.6rem">And also climbing, this is mainly climbing</div>
+  <div><h1>Losers Go Climbing</h1><div class="sub">(Megan came up with that name)</div></div>
+  <div class="sub" style="letter-spacing:.06em;font-size:.6rem">And Camping</div>
 </div>
 <div id="map-container"><canvas id="map-canvas"></canvas></div>
 <div id="legend"><div>▲ Summit</div><div>— Contour (250m interval)</div><div>· Click a peak to read</div></div>
@@ -205,14 +237,10 @@ function geo2xz(lat,lng){
 // ── TRIPS (Data unchanged) ──
 const TRIPS=[
   {name:'Tahquitz Peak',tag:'San Jacinto Mountains · So-Cal',date:'October 2023',elevation:'8,846 ft / 2,696 m',lat:33.745,lng:-116.678,
-   body:['The tram ride up to Mountain Station was almost theatrical — desert floor one moment, subalpine forest the next, the San Jacinto wilderness unfurling below like a crumpled brown cloth. By the time I laced up at the trailhead it was already past ten, and the October light had that low, amber quality that turns granite into gold.',
-         'The south face of Tahquitz is famous among climbers, and you feel why the moment you round the boulder field and see the great slab rising. That afternoon I was just hiking — the Devil\'s Slide trail up through yellow pine — but the rock kept demanding attention, enormous and architectural, like something placed deliberately.',
-         'At the summit the desert opened south toward the Salton Sea, a silver smear sixty miles off. Wind came off the ridge in long, cold pulses. I sat with thermos coffee and watched a pair of ravens work the updraft until my fingers were too cold to write.'],
+   body:['WRite some here jawn'],
    stats:{distance:'11.2 mi',gain:'3,400 ft',season:'Oct–May'}},
   {name:'Mount Whitney',tag:'Sierra Nevada · California',date:'August 2022',elevation:'14,505 ft / 4,421 m',lat:36.578,lng:-118.292,
-   body:['The permit lottery had taken two years of trying. When the email finally came in February I read it three times before I believed it — a single-day permit for late August, the window when the afternoon thunderstorms are most predictable and the summit snowfields are long melted.',
-         'I started at 3:30am, headlamp on the granite dust. The Main Trail is everything you\'ve heard: 22 switchbacks up the face, a lunar plateau, then the final ridge walk on broken rock that seems to go on forever above 14,000 feet where the air starts feeling borrowed.',
-         'The summit register. The little stone hut. The view east into Nevada, that vast tilted plain fading into nothing. Standing on the highest point in the lower 48 it felt quiet, almost private, like being let in on something.'],
+   body:['WRite some here jawn'],
    stats:{distance:'22 mi',gain:'6,100 ft',season:'Jul–Oct'}},
   {name:'Mount Baker',tag:'North Cascades · Washington',date:'July 2024',elevation:'10,781 ft / 3,286 m',lat:48.777,lng:-121.814,
    body:['Will the petrodollar ever recover??',
@@ -663,16 +691,48 @@ function run(markers){
   });
   document.getElementById('panel-close').addEventListener('click',()=>panel.classList.remove('open'));
 
-  function openPanel(trip){
-    document.getElementById('panel-tag').textContent=trip.tag;
-    document.getElementById('panel-title').textContent=trip.name;
-    document.getElementById('panel-meta').textContent=trip.date+' · '+trip.elevation;
-    document.getElementById('panel-body').innerHTML=trip.body.map(p=>`<p>${p}</p>`).join('')+
-      `<div class="enote"><div>Summit <span>${trip.elevation}</span></div><div>Distance <span>${trip.stats.distance}</span></div><div>Gain <span>${trip.stats.gain}</span></div><div>Season <span>${trip.stats.season}</span></div></div>`;
-    document.getElementById('panel-body').scrollTop=0;
-    panel.classList.add('open');
-  }
+  function openPanel(trip) {
+    if (!trip) return;
 
+    // 1. Update Header Strings
+    document.getElementById('panel-tag').textContent = trip.tag;
+    document.getElementById('panel-title').textContent = trip.name;
+    document.getElementById('panel-meta').textContent = `${trip.date} · ${trip.elevation}`;
+    
+    // 2. Build Body (Paragraphs)
+    const bodyHtml = trip.body.map(p => `<p>${p}</p>`).join('');
+
+    // 3. Build Stats Grid (The "enote" section)
+    // Note: We use trip.stats.distance, etc. exactly as defined in your TRIPS array
+    const statsHtml = `
+      <div class="enote">
+        <div class="enote-item">
+          <div class="enote-label">Summit</div>
+          <div class="enote-value">${trip.elevation}</div>
+        </div>
+        <div class="enote-item">
+          <div class="enote-label">Distance</div>
+          <div class="enote-value">${trip.stats.distance}</div>
+        </div>
+        <div class="enote-item">
+          <div class="enote-label">Gain</div>
+          <div class="enote-value">${trip.stats.gain}</div>
+        </div>
+        <div class="enote-item">
+          <div class="enote-label">Season</div>
+          <div class="enote-value">${trip.stats.season}</div>
+        </div>
+      </div>
+    `;
+
+    // 4. Inject into the DOM
+    const bodyContainer = document.getElementById('panel-body');
+    bodyContainer.innerHTML = bodyHtml + statsHtml;
+    
+    // Reset scroll and show panel
+    bodyContainer.scrollTop = 0;
+    document.getElementById('blog-panel').classList.add('open');
+  }
   // 6. Ocean plane sync
   const oGeo=new THREE.PlaneGeometry(100,100); oGeo.rotateX(-Math.PI/2);
   const oMesh = new THREE.Mesh(oGeo, new THREE.MeshLambertMaterial({color: 0xbfcdd6}));
